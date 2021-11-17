@@ -19,8 +19,9 @@ MEMORY = []
 PC = 256
 
 CodeWithData = {}
+CodeWithOP = {}
 
-PreIssueQueue = ["", "", "", ""]
+PreIssueQueue = []
 # PreIssueQueue[0]: Entry 0
 # PreIssueQueue[1]: Entry 1
 # PreIssueQueue[2]: Entry 2
@@ -29,26 +30,33 @@ PreIssueQueue = ["", "", "", ""]
 PreALU1Queue = ["", ""]
 PreALU2Queue = ["", ""]
 PreMEMQueue = [""]
-PostALU2Queue = ["", ""]
+PostALU2Queue = [""]
 PostMEMQueue = [""]
 
 RegState = ["", "", "", "", "", "", "", "",
             "", "", "", "", "", "", "", "",
             "", "", "", "", "", "", "", "",
-            "", "", "", "", "", "", "", "", ]
-
+            "", "", "", "", "", "", "", ""]
 IFUnit = ["", ""]
 # IFUnit[0]: Waiting Waiting Instruction
 # IFUnit[1]: Executed Instruction
 WaitSignal = False
+ExecuteSignal = False
+RegResetFlag = False
+WARSignal = False
+WAWSignal = False
+WARSignal = False
+flag4break = False
+TempList = []
+TempList1 = []
 
 
 def IsFull(Queue, length):
     for i in range(length):
         if Queue[i] == "":  # 若
-            return i
+            return False
 
-    return -1
+    return True
 
 
 def IsEmpty(Queue, length):
@@ -57,15 +65,17 @@ def IsEmpty(Queue, length):
         if Queue[i] == "":
             cnt += 1
     if cnt == length:
-        return 1
+        return True
     else:
-        return 0
+        return False
 
 
 def EnQueue(Queue, length, elem):
-    i = IsFull(Queue, length)
-    if i >= 0:
-        Queue[i] = elem
+    if not IsFull(Queue, length):
+        for i in range(length):
+            if Queue[i] == "":
+                Queue[i] = elem
+                break
 
 
 def DeQueue(Queue, length):
@@ -76,32 +86,32 @@ def DeQueue(Queue, length):
     return None
 
 
-def Simulation(Memory, pc):
+def Simulation():
     # Issue Unit
     cycle = 1
-
-    while cycle < 3:  # 当 IF Unit 中执行的指令为 Break 时退出
-        # 每次 Issue 两条指令
-        IFetch(Memory, pc)
-        IFetch(Memory, pc + 4)
-        Issue()
-        if cycle == 1:
-            Print(cycle)
+    global flag4break
+    with open("./test.txt", "w") as f:
+        while not flag4break:  # 当 IF Unit 中执行的指令为 Break 时退出
+            WriteBack()
+            MemOperate()
+            Execute()
+            OccupiedSlot = Issue()
+            IFetch(OccupiedSlot)
+            CheckTempList()
+            WriteToFile(cycle, f)
+            #Print(cycle)
             cycle += 1
-            continue
-        # Issue 指令
-        Issue()
-        # 执行
-        Execute()
-        # Mem
-        MemOperate()
-        # 写回
-        pc1 = WriteBack(pc)
-        if pc != pc1:
-            pc = pc1
-        else:
-            pc = pc + 4
-        cycle += 1
+
+
+def CheckTempList():
+    if TempList:
+        for code in TempList:
+            ResetRegState(code)
+            TempList.remove(code)
+    if TempList1:
+        for code in TempList1:
+            ResetRegState(code)
+            TempList1.remove(code)
 
 
 def Print(cycle):
@@ -109,22 +119,38 @@ def Print(cycle):
     print("Cycle:{}\n".format(cycle))
     print("\n")
     print("IF Unit:\n")
-    print("\tWaiting Instruction:{}\n".format(IFUnit[0]))
-    print("\tExecuted Instruction:{}\n".format(IFUnit[1]))
+    print("\tWaiting Instruction: {}\n".format(IFUnit[0]))
+    print("\tExecuted Instruction: {}\n".format(IFUnit[1]))
     print("Pre-Issue Queue:\n")
-    print("\tEntry 0:{}\n".format(PreIssueQueue[0]))
-    print("\tEntry 1:{}\n".format(PreIssueQueue[1]))
-    print("\tEntry 2:{}\n".format(PreIssueQueue[2]))
-    print("\tEntry 3:{}\n".format(PreIssueQueue[3]))
+    if len(PreIssueQueue) == 1:
+        print("\tEntry 0: {}\n".format(PreIssueQueue[0]))
+        print("\tEntry 1:\n")
+        print("\tEntry 2:\n")
+        print("\tEntry 3:\n")
+    if len(PreIssueQueue) == 2:
+        print("\tEntry 0: {}\n".format(PreIssueQueue[0]))
+        print("\tEntry 1: {}\n".format(PreIssueQueue[1]))
+        print("\tEntry 2:\n")
+        print("\tEntry 3:\n")
+    if len(PreIssueQueue) == 3:
+        print("\tEntry 0: {}\n".format(PreIssueQueue[0]))
+        print("\tEntry 1: {}\n".format(PreIssueQueue[1]))
+        print("\tEntry 2: {}\n".format(PreIssueQueue[2]))
+        print("\tEntry 3:\n")
+    if len(PreIssueQueue) == 4:
+        print("\tEntry 0: {}\n".format(PreIssueQueue[0]))
+        print("\tEntry 1: {}\n".format(PreIssueQueue[1]))
+        print("\tEntry 2: {}\n".format(PreIssueQueue[2]))
+        print("\tEntry 3: {}\n".format(PreIssueQueue[3]))
     print("Pre-ALU1 Queue:\n")
-    print("\tEntry 0:{}\n".format(PreALU1Queue[0]))
-    print("\tEntry 1:{}\n".format(PreALU1Queue[1]))
-    print("Pre-MEM Queue:{}\n".format(PreMEMQueue[0]))
-    print("Post-MEM Queue:{}\n".format(PostMEMQueue))
+    print("\tEntry 0: {}\n".format(PreALU1Queue[0]))
+    print("\tEntry 1: {}\n".format(PreALU1Queue[1]))
+    print("Pre-MEM Queue: {}\n".format(PreMEMQueue[0]))
+    print("Post-MEM Queue: {}\n".format(PostMEMQueue[0]))
     print("Pre-ALU2 Queue:\n")
-    print("\tEntry 0:{}\n".format(PreALU2Queue[0]))
-    print("\tEntry 1:{}\n".format(PreALU2Queue[1]))
-    print("Post-ALU2 Queue:{}\n".format(PostALU2Queue[0]))
+    print("\tEntry 0: {}\n".format(PreALU2Queue[0]))
+    print("\tEntry 1: {}\n".format(PreALU2Queue[1]))
+    print("Post-ALU2 Queue: {}\n".format(PostALU2Queue[0]))
     print("Registers\n")
     print("R00:\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(REGISTERS[0], REGISTERS[1],
                                                           REGISTERS[2], REGISTERS[3],
@@ -154,117 +180,390 @@ def Print(cycle):
     print("\n")
 
 
-def IFetch(Memory, pc):
-    i = int((pc - 256) / 4)
-    if not IsFull(PreIssueQueue, 4) and IFUnit[0] == "":  # PreIssueQueue未满，且IFUnit中没有等待的指令
-        OP1 = Memory[i][:3]
-        print("1")
-        if OP1 not in Branch:
-            EnQueue(PreIssueQueue, 4, Memory[i])
-            print("2")
-            print(PreIssueQueue[0])
-            return 1
-        else:
-            if OP1 == "J" or OP1 == "Break":
-                if IFUnit[1] == "":  # 若执行单元为空，则放入IFUnit执行单元
-                    IFUnit[1] = Memory[i]
-                else:  # 若有指令占用执行单元，则放入IFUnit等待单元
-                    IFUnit[0] = Memory[i]
+def WriteToFile(cycle, f):
+    f.writelines("--------------------\n")
+    f.writelines("Cycle:{}\n".format(cycle))
+    f.writelines("\n")
+    f.writelines("IF Unit:\n")
+    f.writelines("\tWaiting Instruction: {}\n".format(IFUnit[0]))
+    f.writelines("\tExecuted Instruction: {}\n".format(IFUnit[1]))
+    f.writelines("Pre-Issue Queue:\n")
+    if len(PreIssueQueue) == 0:
+        f.writelines("\tEntry 0:\n")
+        f.writelines("\tEntry 1:\n")
+        f.writelines("\tEntry 2:\n")
+        f.writelines("\tEntry 3:\n")
+    if len(PreIssueQueue) == 1:
+        f.writelines("\tEntry 0: {}\n".format(PreIssueQueue[0]))
+        f.writelines("\tEntry 1:\n")
+        f.writelines("\tEntry 2:\n")
+        f.writelines("\tEntry 3:\n")
+    if len(PreIssueQueue) == 2:
+        f.writelines("\tEntry 0: {}\n".format(PreIssueQueue[0]))
+        f.writelines("\tEntry 1: {}\n".format(PreIssueQueue[1]))
+        f.writelines("\tEntry 2:\n")
+        f.writelines("\tEntry 3:\n")
+    if len(PreIssueQueue) == 3:
+        f.writelines("\tEntry 0: {}\n".format(PreIssueQueue[0]))
+        f.writelines("\tEntry 1: {}\n".format(PreIssueQueue[1]))
+        f.writelines("\tEntry 2: {}\n".format(PreIssueQueue[2]))
+        f.writelines("\tEntry 3:\n")
+    if len(PreIssueQueue) == 4:
+        f.writelines("\tEntry 0: {}\n".format(PreIssueQueue[0]))
+        f.writelines("\tEntry 1: {}\n".format(PreIssueQueue[1]))
+        f.writelines("\tEntry 2: {}\n".format(PreIssueQueue[2]))
+        f.writelines("\tEntry 3: {}\n".format(PreIssueQueue[3]))
+    f.writelines("Pre-ALU1 Queue:\n")
+    f.writelines("\tEntry 0: {}\n".format(PreALU1Queue[0]))
+    f.writelines("\tEntry 1: {}\n".format(PreALU1Queue[1]))
+    f.writelines("Pre-MEM Queue: {}\n".format(PreMEMQueue[0]))
+    f.writelines("Post-MEM Queue: {}\n".format(PostMEMQueue[0]))
+    f.writelines("Pre-ALU2 Queue:\n")
+    f.writelines("\tEntry 0: {}\n".format(PreALU2Queue[0]))
+    f.writelines("\tEntry 1: {}\n".format(PreALU2Queue[1]))
+    f.writelines("Post-ALU2 Queue: {}\n\n".format(PostALU2Queue[0]))
+    f.writelines("Registers\n")
+    f.writelines("R00:\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(REGISTERS[0], REGISTERS[1],
+                                                                 REGISTERS[2], REGISTERS[3],
+                                                                 REGISTERS[4], REGISTERS[5],
+                                                                 REGISTERS[6], REGISTERS[7]))
+    f.writelines("R08:\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(REGISTERS[8], REGISTERS[9],
+                                                                 REGISTERS[10], REGISTERS[11],
+                                                                 REGISTERS[12], REGISTERS[13],
+                                                                 REGISTERS[14], REGISTERS[15]))
+    f.writelines("R16:\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(REGISTERS[16], REGISTERS[17],
+                                                                 REGISTERS[18], REGISTERS[19],
+                                                                 REGISTERS[20], REGISTERS[21],
+                                                                 REGISTERS[22], REGISTERS[23]))
+    f.writelines("R24:\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(REGISTERS[24], REGISTERS[25],
+                                                                 REGISTERS[26], REGISTERS[27],
+                                                                 REGISTERS[28], REGISTERS[29],
+                                                                 REGISTERS[30], REGISTERS[31]))
+    f.writelines("\nData\n")
+    f.writelines("300:\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(MEMORY[11], MEMORY[12],
+                                                                 MEMORY[13], MEMORY[14],
+                                                                 MEMORY[15], MEMORY[16],
+                                                                 MEMORY[17], MEMORY[18]) +
+                 "332:\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(MEMORY[19], MEMORY[20],
+                                                                 MEMORY[21], MEMORY[22],
+                                                                 MEMORY[23], MEMORY[24],
+                                                                 MEMORY[25], MEMORY[26]))
 
-            elif OP1 == "JR":
-                ls = CodeWithData(Memory[i])
-                rs = ls[0]
-                if RegState[rs] == "" and IFUnit[1] == "":  # 首先检查含有跳转地址的寄存器是否被占用
-                    IFUnit[1] = Memory[i]
+
+def IFetch(Occupied):
+    global PC
+    global WaitSignal
+    global ExecuteSignal
+    global flag4break
+    for j in range(2):
+        i = int((PC - 256) / 4)
+        command = MEMORY[i]
+        OP = CodeWithOP[command]
+        flag = False  # 是否修改PC值
+        flag1 = False  # 跳转
+        if IFUnit[0] == "":
+            if Occupied < 4:
+                if OP == "J" or OP == "JR" or OP == "BREAK" or OP == "BEQ" or OP == "BGTZ" or OP == "BLTZ":
+                    if flag4break:
+                        break
+                    if CheckRegState(command):
+                        if IFUnit[1] == "":
+                            if OP == "BREAK":
+                                flag4break = True
+                            IFUnit[1] = command
+                            Operation(command)
+                            Occupied += 1
+                            ExecuteSignal = True
+                            flag1 = True
+                        else:
+                            IFUnit[0] = command
+                            flag = True
+                            Occupied += 1
+                            WaitSignal = True
+                    else:
+                        IFUnit[0] = command
+                        flag = True
+                        Occupied += 1
+                        WaitSignal = True
                 else:
-                    IFUnit[0] = Memory[i]
-            else:  # "BEQ","BLTZ", "BGTZ"
-                ls = CodeWithData(Memory[i])
-                rs = ls[0]
-                rt = ls[0]
-                if RegState[rs] == "" and RegState[rt] == "" and IFUnit[1] == "":  # 先检查寄存器是否被占用
-                    IFUnit[1] = Memory[i]  # IFUnit 执行单元可用
-                else:
-                    IFUnit[0] = Memory[i]  # IFUnit 执行单元不可用
+                    PreIssueQueue.append(command)
+                    Occupied += 1
+                    flag = True
+        else:
+            command = IFUnit[0]
+            if CheckRegState(command):
+                if WARSignal:
+                    WaitSignal = False
+                    return
+                IFUnit[1] = IFUnit[0]
+                Operation(command)
+                IFUnit[0] = ""
+                ExecuteSignal = True
+                break
+        if flag and not flag1:
+            PC += 4
 
 
 def Issue():
-    if PreIssueQueue[0] != '':
-        command = PreIssueQueue[0]
-        OP = command[:3]
+    n1 = 0
+    n2 = 0
+    global ExecuteSignal
+    Occupied = 0
+    if ExecuteSignal and IFUnit[1] != "":
+        IFUnit[1] = ""
+        ExecuteSignal = False
+    Occupied = len(PreIssueQueue)  # 记录上个状态的PreIssue的占用情况
 
-        if OP == "LW" or OP == "SW":
-            if CheckRegState(command) and IFUnit[0] == "":
-                DeQueue(PreIssueQueue, 4)
-                EnQueue(PreALU1Queue, 2, command)
+    for i in range(len(PreIssueQueue)):
+        if PreIssueQueue[i] is not None:
+            command = PreIssueQueue[i]
+            OP = CodeWithOP[command]
 
-        else:
-            if CheckRegState(command) and IFUnit[0] == "":
-                DeQueue(PreIssueQueue, 4)
-                EnQueue(PreALU2Queue, 2, command)
+            if OP == "LW":
+                if CheckRegState(command) and not IsRAW(command) and not IsWAR(command):
+                    ModifyRegState(command)
+                    PreIssueQueue.remove(command)
+                    EnQueue(PreALU1Queue, 2, command)
+                    n1 += 1
+                    break
+            elif OP == "SW":
+                if CheckRegState(command) and not IsRAW(command):
+                    ModifyRegState(command)
+                    PreIssueQueue.remove(command)
+                    EnQueue(PreALU1Queue, 2, command)
+                    n1 += 1
+                    break
+            else:
+                if CheckRegState(command) and not IsRAW(command) and not IsWAR(command):
+                    ModifyRegState(command)
+                    PreIssueQueue.remove(command)
+                    EnQueue(PreALU2Queue, 2, command)
+                    n2 += 1
+                    break
+            if n1 + n2 > 2:
+                break
+
+    return Occupied
 
 
 def Execute():
-    if IFUnit[0] != "":
-        code = IFUnit[0]
-        IFUnit[0] = ""
-        IFUnit[1] = code
-
-    if PreALU1Queue[0] != '' and IsEmpty(PreMEMQueue, 1):
+    if PreALU1Queue[0] != "" and IsEmpty(PreMEMQueue, 1):
         command = PreALU1Queue[0]
-        if CheckRegState(command):
-            ModifyRegState(command)
-            EnQueue(PreMEMQueue, 1, command)
-            DeQueue(PreALU1Queue, 2)
-    if PreALU2Queue[0] != '' and IsEmpty(PostALU2Queue, 1):
-        command = PostALU2Queue[0]
-        if CheckRegState(command):
-            ModifyRegState(command)
-            EnQueue(PostALU2Queue, 1, command)
-            DeQueue(PostALU2Queue, 2)
+        EnQueue(PreMEMQueue, 1, command)
+        DeQueue(PreALU1Queue, 2)
+    if PreALU2Queue[0] != "" and IsEmpty(PostALU2Queue, 1):
+        command = PreALU2Queue[0]
+        EnQueue(PostALU2Queue, 1, command)
+        DeQueue(PreALU2Queue, 2)
 
 
 def MemOperate():
     if PreMEMQueue[0] != "" and IsEmpty(PostMEMQueue, 1):
         command = PreMEMQueue[0]
         EnQueue(PostMEMQueue, 1, command)
+        DeQueue(PreMEMQueue, 1)
+        OP = CodeWithOP[command]
+        if OP == "SW":
+            Operation(command)
+            DeQueue(PostMEMQueue, 1)
+            TempList1.append(command)
+
+
+def WriteBack():
+    flag = True
+    flag1 = True
+    if PostALU2Queue[0] != "":
+        command = PostALU2Queue[0]
+        Operation(command)
+        TempList.append(command)
+        DeQueue(PostALU2Queue, 1)
+
+    if PostMEMQueue[0] != "":
+        command = PostMEMQueue[0]
+        Operation(command)
+        TempList1.append(command)
         DeQueue(PostMEMQueue, 1)
 
 
-def WriteBack(pc):
-    if PostALU2Queue[0] != "":
-        command = PostALU2Queue[0]
-        if CheckRegState(command):
-            pc = Operation(command, pc)
-            ResetRegState(command)
-    if PostMEMQueue[0] != "":
-        command = PostMEMQueue[0]
-        if CheckRegState(command, pc):
-            pc = Operation(command, pc)
-            ResetRegState(command)
-    return pc
-
-
-def CheckRegState(code):  # 检查要访问的寄存器位置
+def ListRegState(code):  # 检查要访问的寄存器位置
     ls = CodeWithData[code]
-    for i in range(len(ls)):
-        if RegState[ls[i]] != "":
-            return -1
-    return 1
+    OP = CodeWithOP[code]
+    if OP in R_type:
+        if OP == "SLL" or OP == "SRL" or OP == "SRA" or OP == "NOP":
+            rt = ls[0]
+            rd = ls[1]
+            return {"R": [rt], "W": rd}
+
+        elif OP == "JR":  # PC <- rs
+            rs = ls[0]
+            return rs
+        else:
+            rs = ls[0]
+            rt = ls[1]
+            rd = ls[2]
+            return {"R": [rs, rt], "W": rd}
+
+    if OP in I_type:
+        rs = ls[0]
+        rt = ls[1]
+
+        if OP == "BLTZ" or OP == "BGTZ":
+            return {"R": [rs], "W": None}
+        elif OP == "SW":
+            return {"R": [rs, rt], "W": None}
+        else:
+            return {"R": [rs], "W": rt}
+    return None
+
+
+def IsRAW(command):
+    i = PreIssueQueue.index(command)
+    if i == 0:
+        return False
+
+    ToVisitReg = ListRegState(command)
+    if ToVisitReg is not None:
+        ToWrite = ToVisitReg["W"]  # 当前指令要写的寄存器
+        ToRead = ToVisitReg["R"]  # 当前指令要访问的寄存器
+    else:
+        return False
+
+    for j in range(i):
+        code = PreIssueQueue[j]
+        ToVisitReg1 = ListRegState(code)
+        if ToVisitReg1 is None:
+            continue
+        ToWrite1 = ToVisitReg1["W"]  # 当前指令之前的指令要写的寄存器
+        if ToWrite1 is None:
+            continue
+        if ToWrite1 in ToRead:  # 若之前指令要写的寄存器在当前指令要读的寄存器的list里
+            return True
+
+    return False
+
+
+def IsWAR(command):
+    i = PreIssueQueue.index(command)
+    if i == 0:
+        return False
+
+    ToVisitReg = ListRegState(command)
+    if ToVisitReg is not None:
+        ToWrite = ToVisitReg["W"]  # 当前指令要写的寄存器
+        ToRead = ToVisitReg["R"]  # 当前指令要访问的寄存器
+    else:
+        return False
+
+    for j in range(i):
+        code = PreIssueQueue[j]
+        ToVisitReg1 = ListRegState(code)
+        if ToVisitReg1 is None:
+            continue
+        ToRead1 = ToVisitReg1["R"]  # 当前指令之前的指令要写的寄存器
+        if ToRead1 is None:
+            continue
+        if ToWrite in ToRead1:  # 若之前指令要写的寄存器在当前指令要读的寄存器的list里
+            return True
+
+    return False
+
+
+def CheckRegState(code, WhetherReturn=False):  # 检查要访问的寄存器位置
+    ls = CodeWithData[code]
+
+    OP = CodeWithOP[code]
+    if OP in R_type:
+        if OP == "SLL" or OP == "SRL" or OP == "SRA" or OP == "NOP":
+            rt = ls[0]
+            rd = ls[1]
+            if RegState[rt] != "" or RegState[rd] != "":
+                return False
+
+        elif OP == "JR":  # PC <- rs
+            rs = ls[0]
+            if RegState[rs] != "":
+                return False
+        else:
+            rs = ls[0]
+            rt = ls[1]
+            rd = ls[2]
+            if RegState[rs] != "" or RegState[rt] != "" or RegState[rd] != "":
+                return False
+
+    if OP in I_type:
+        rs = ls[0]
+        rt = ls[1]
+
+        if OP == "BLTZ" or OP == "BGTZ":
+            if RegState[rs] != "":
+                return False
+        else:
+            if RegState[rs] != "" or RegState[rt] != "":
+                return False
+
+    return True
 
 
 def ModifyRegState(code):  # 修改寄存器状态
     ls = CodeWithData[code]
-    OP = code[:3]
-    for i in range(len(ls)):
-        if REGISTERS[ls[i]] == "":
-            REGISTERS[ls[i]] = OP
+    OP = CodeWithOP[code]
+    if OP in R_type:
+        if OP == "SLL" or OP == "SRL" or OP == "SRA" or OP == "NOP":
+            rt = ls[0]
+            rd = ls[1]
+            if RegState[rd] == "":
+                RegState[rd] = OP
+
+        elif OP == "JR":  # PC <- rs
+            rs = ls[0]
+            if RegState[rs] == "":
+                RegState[rs] = OP
+
+        else:
+            rs = ls[0]
+            rt = ls[1]
+            rd = ls[2]
+            if RegState[rd] == "":
+                RegState[rd] = OP
+
+    if OP in I_type:
+        rs = ls[0]
+        rt = ls[1]
+
+        if OP != "BLTZ" or OP != "BGTZ":
+            if RegState[rt] == "":
+                RegState[rt] = OP
 
 
 def ResetRegState(code):
     ls = CodeWithData[code]
-    for i in range(len(ls)):
-        REGISTERS[ls[i]] = ""
+    OP = CodeWithOP[code]
+    if OP in R_type:
+        if OP == "SLL" or OP == "SRL" or OP == "SRA" or OP == "NOP":
+            rt = ls[0]
+            rd = ls[1]
+            if RegState[rd] != "":
+                RegState[rd] = ""
+
+        elif OP == "JR":  # PC <- rs
+            rs = ls[0]
+            if RegState[rs] != "":
+                RegState[rs] = ""
+
+        else:
+            rs = ls[0]
+            rt = ls[1]
+            rd = ls[2]
+            if RegState[rd] != "":
+                RegState[rd] = ""
+
+    if OP in I_type:
+        rs = ls[0]
+        rt = ls[1]
+
+        if OP != "BLTZ" or OP != "BGTZ":
+            if RegState[rt] != "":
+                RegState[rt] = ""
 
 
 def Decode(MachineCode, op):  #
@@ -338,33 +637,38 @@ def Decode(MachineCode, op):  #
             ls = []
             AssemblyCode = "{}".format(OP)
 
-        CodeWithData[AssemblyCode] = ls
+        CodeWithData["[{}]".format(AssemblyCode)] = ls
+        CodeWithOP["[{}]".format(AssemblyCode)] = OP
+        return "[{}]".format(AssemblyCode)
+
     else:  # 读取到数据
         value = ComToDec(MachineCode)
         AssemblyCode = "{}".format(value)
+        return AssemblyCode
 
-    return AssemblyCode
 
-
-def Operation(AssemblyCode, pc):
-    OP = AssemblyCode[:3]
+def Operation(AssemblyCode):
+    global PC
+    OP = CodeWithOP[AssemblyCode]
     ls = CodeWithData[AssemblyCode]
     if OP == "SLL" or OP == "NOP":  # SLL R16, R1, #2
         rt = ls[0]
         rd = ls[1]
         sa = ls[2]
-        REGISTERS[rd] = REGISTERS[rt] * (2 ** sa)
+        REGISTERS[rd] = REGISTERS[rt] * (2 ** int(sa))
     if OP == "SRL" or OP == "SRA":
         rt = ls[0]
         rd = ls[1]
         sa = ls[2]
-        REGISTERS[rd] = REGISTERS[rt] / (2 ** sa)  # rd <- rt >> sa
+        REGISTERS[rd] = REGISTERS[rt] / (2 ** int(sa))  # rd <- rt >> sa
     if OP == "JR":
         rs = ls[0]
-        pc = REGISTERS[rs]
+        PC = REGISTERS[rs]
     if OP == "SLT":
-        rd = ls[3]
-        if rs < rt:
+        rs = ls[0]
+        rt = ls[1]
+        rd = ls[2]
+        if int(REGISTERS[rs]) < int(REGISTERS[rt]):
             REGISTERS[rd] = 1
         else:
             REGISTERS[rd] = 0
@@ -372,17 +676,17 @@ def Operation(AssemblyCode, pc):
         rs = ls[0]
         rt = ls[1]
         rd = ls[2]
-        REGISTERS[rd] = REGISTERS[rs] + REGISTERS[rt]
+        REGISTERS[rd] = int(REGISTERS[rs]) + int(REGISTERS[rt])
     if OP == "SUB":  # rd <- rs - rt
         rs = ls[0]
         rt = ls[1]
         rd = ls[2]
-        REGISTERS[rd] = REGISTERS[rs] - REGISTERS[rt]
+        REGISTERS[rd] = int(REGISTERS[rs]) - int(REGISTERS[rt])
     if OP == "MUL":
         rs = ls[0]
         rt = ls[1]
         rd = ls[2]
-        REGISTERS[rd] = REGISTERS[rs] * REGISTERS[rt]
+        REGISTERS[rd] = int(REGISTERS[rs]) * int(REGISTERS[rt])
     if OP == "AND":
         rs = ls[0]
         rt = ls[1]
@@ -407,20 +711,20 @@ def Operation(AssemblyCode, pc):
         rs = ls[0]
         rt = ls[1]
         imm_value = ls[2]
-        if REGISTERS[rs] == REGISTERS[rt]:
-            pc += imm_value * 4 + 4
+        if int(REGISTERS[rs]) == int(REGISTERS[rt]):
+            PC += int(imm_value) * 4
     if OP == "BLTZ":
         rs = ls[0]
         rt = ls[1]
         imm_value = ls[2]
         if REGISTERS[rs] < 0:
-            pc += imm_value * 4 + 4
+            PC += imm_value * 4 + 4
     if OP == "BGTZ":
         rs = ls[0]
         rt = ls[1]
         imm_value = ls[2]
         if REGISTERS[rs] > 0:
-            pc += imm_value * 4 + 4
+            PC += imm_value * 4 + 4
     if OP == "SW":
         rs = ls[0]
         rt = ls[1]
@@ -434,7 +738,7 @@ def Operation(AssemblyCode, pc):
         imm_value = ls[2]
         base = REGISTERS[rs]
         addr = base + imm_value
-        REGISTERS[rt] = MEMORY[int((addr - 256) / 4)]
+        REGISTERS[rt] = int(MEMORY[int((addr - 256) / 4)])
     if OP == "ADDI":
         rs = ls[0]
         rt = ls[1]
@@ -457,9 +761,7 @@ def Operation(AssemblyCode, pc):
         REGISTERS[rt] = REGISTERS[rs] ^ imm_value
     if OP == "J":
         addr = ls[0]
-        pc = addr * 4
-
-    return pc
+        PC = addr * 4
 
 
 def ComToDec(com_str):  # 补码求真值
@@ -512,7 +814,4 @@ if __name__ == '__main__':
     # file_path = './' + file_name  # 输入sample.txt
     file_path = ".\sample1.txt"
     MEMORY = ReadfileToMemory(file_path)
-    OP = MEMORY[0][:3]
-    print(OP)
-    pc = 256
-    Simulation(MEMORY, pc)
+    Simulation()
